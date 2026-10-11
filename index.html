@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CARTOONS GRAMMAR</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for Kids Aesthetic -->
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive;
+            background-color: #87CEEB;
+            margin: 0;
+            overflow: auto; /* Fallback scroll */
+            touch-action: none;
+            /* Happy Polka Dot Background for main gameplay */
+            background-image: radial-gradient(#ffffff44 15%, transparent 16%), radial-gradient(#ffffff44 15%, transparent 16%);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+        }
+
+        #main-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            /* Removed min-width and min-height to fix mobile scaling */
+            overflow: hidden;
+            background: #222;
+        }
+
+        #webcam-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror camera */
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100; /* Dinaikkan ke 100 supaya sentiasa berada di atas UI dan jawapan */
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        /* SHARP CARTOON TEXT (Fix for blurriness) */
+        .cartoon-text-sharp {
+            color: #ffffff;
+            /* Menggunakan unit 'em' supaya bayang berskala dinamik dengan saiz teks. Mengelakkan teks berlapis pada telefon */
+            text-shadow: 
+                -0.04em -0.04em 0 #000, 0.04em -0.04em 0 #000, -0.04em 0.04em 0 #000, 0.04em 0.04em 0 #000,
+                 0px -0.04em 0 #000, 0px 0.04em 0 #000, -0.04em 0px 0 #000, 0.04em 0px 0 #000,
+                 0.1em 0.1em 0px rgba(0,0,0,0.6);
+            -webkit-font-smoothing: antialiased;
+            transform: translateZ(0); /* Hardware acceleration to prevent scaling blur */
+        }
+
+        /* 3D Low Poly Gift Box Style */
+        .gift-box-container {
+            pointer-events: auto;
+            transition: transform 0.2s;
+        }
+        
+        .gift-box {
+            width: 180px;
+            height: 180px;
+            position: relative;
+            transform-style: preserve-3d;
+            perspective: 1000px;
+        }
+
+        .gift-box svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0px 15px 10px rgba(0,0,0,0.5));
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* Animations */
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(8deg); }
+            50% { transform: rotate(0deg); }
+            75% { transform: rotate(-8deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        @keyframes popOpen {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3) translateY(-30px); filter: brightness(1.5); }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .anim-shake {
+            animation: shake 0.4s infinite;
+        }
+
+        .anim-open {
+            animation: popOpen 0.8s forwards;
+        }
+
+        /* Continuous gentle floating */
+        .anim-float {
+            animation: floating 4s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* NEW DECORATION STYLES */
+        .sticker {
+            position: absolute;
+            font-size: 3rem;
+            filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.4));
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .float-slow { animation: floatUpDown 4s ease-in-out infinite; }
+        .float-fast { animation: floatUpDown 2.5s ease-in-out infinite; }
+        .spin-slow { animation: spin 8s linear infinite; }
+
+        @keyframes floatUpDown {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(10deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* SUPER FUN UI ELEMENTS */
+        .comic-box {
+            border: 6px solid #000;
+            box-shadow: 10px 10px 0px #000;
+            border-radius: 2rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            /* Subtle inner highlight */
+            background-image: linear-gradient(180deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 40%);
+        }
+
+        /* Sunburst Background for Start & End Screens */
+        .bg-sunburst {
+            position: absolute;
+            top: -50%; left: -50%; right: -50%; bottom: -50%;
+            background-color: #4DABF7;
+            background-image: repeating-conic-gradient(
+                from 0deg,
+                #4DABF7 0deg 15deg,
+                #74C0FC 15deg 30deg
+            );
+            animation: spinBg 30s linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes spinBg {
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Custom Scrollbar for Leaderboard */
+        ::-webkit-scrollbar { width: 12px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 10px; border: 2px solid #000; }
+        ::-webkit-scrollbar-thumb { background: #FF4500; border-radius: 10px; border: 2px solid #000; }
+    </style>
+</head>
+<body>
+
+    <div id="main-container">
+        <!-- Background Video -->
+        <video id="webcam-video" autoplay playsinline></video>
+        
+        <!-- Drawing Canvas for Tracking -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Happy Environment Floating Stickers -->
+        <div class="pointer-events-none absolute inset-0 z-10 overflow-hidden hidden" id="stickers-container">
+            <div class="sticker float-slow" style="top: 10%; left: 5%; font-size: 4rem;">🎈</div>
+            <div class="sticker float-fast" style="top: 15%; right: 8%; font-size: 5rem;">⭐</div>
+            <div class="sticker spin-slow" style="bottom: 30%; left: 10%; font-size: 3.5rem;">✨</div>
+            <div class="sticker float-slow" style="bottom: 25%; right: 5%; font-size: 4.5rem;">🚀</div>
+            <div class="sticker float-fast" style="top: 45%; left: 2%; font-size: 3rem;">🌈</div>
+            <div class="sticker spin-slow" style="top: 40%; right: 2%; font-size: 4rem;">🎨</div>
+        </div>
+
+        <!-- UI Layer -->
+        <div class="ui-layer">
+            
+            <!-- Dashboard (Top) -->
+            <div id="dashboard" class="absolute top-0 left-0 w-full flex justify-between items-start p-2 md:p-8 hidden z-30">
+                <div class="comic-box bg-lime-400 px-3 py-1 md:px-6 md:py-3 text-center flex flex-col items-center transform -rotate-2">
+                    <span class="text-sm md:text-2xl text-black font-black uppercase tracking-wider mb-1">🏆 Score</span>
+                    <span id="score-display" class="text-3xl md:text-6xl text-white font-black cartoon-text-sharp">0</span>
+                </div>
+                
+                <div class="comic-box bg-pink-400 px-3 py-1 md:px-6 md:py-3 text-center flex flex-col items-center transform rotate-2">
+                    <span class="text-sm md:text-2xl text-black font-black uppercase tracking-wider mb-1">⏰ Time</span>
+                    <span id="time-display" class="text-3xl md:text-6xl text-white font-black cartoon-text-sharp">00:00</span>
+                </div>
+            </div>
+
+            <!-- Question Area -->
+            <div id="question-container" class="absolute top-0 left-0 w-full h-full flex items-start justify-center pt-24 md:pt-40 hidden z-20 pointer-events-none">
+                <div class="comic-box bg-yellow-300 p-4 md:p-12 max-w-4xl w-[90%] text-center relative anim-float">
+                    <!-- Decorate Question Box -->
+                    <div class="absolute -top-6 -left-6 md:-top-10 md:-left-10 sticker float-slow" style="font-size: 3rem;">🌟</div>
+                    <div class="absolute -bottom-6 -right-6 md:-bottom-10 md:-right-10 sticker float-fast" style="font-size: 3rem;">🎉</div>
+                    
+                    <!-- Question Ribbon -->
+                    <div class="absolute -top-5 md:-top-8 left-1/2 transform -translate-x-1/2 comic-box bg-red-500 text-white px-4 md:px-8 py-1 md:py-2 text-lg md:text-3xl font-black shadow-[4px_4px_0_0_#000] whitespace-nowrap z-10">
+                        Question <span id="q-num">1</span>/10
+                    </div>
+                    
+                    <h1 id="question-text" class="text-2xl sm:text-4xl md:text-6xl text-black font-black leading-snug drop-shadow-lg mt-4 pointer-events-auto">Loading...</h1>
+                </div>
+            </div>
+
+            <!-- Answer Boxes (Bottom Corners) -->
+            <div id="answers-container" class="absolute bottom-0 left-0 w-full flex justify-between px-2 md:px-16 pb-4 md:pb-12 hidden z-30">
+                <!-- Option A -->
+                <div id="box-A" class="gift-box-container flex flex-col items-center anim-float w-[45%] md:w-auto" style="animation-delay: 0s;">
+                    <div class="comic-box bg-purple-500 px-2 py-2 md:px-10 md:py-4 mb-2 md:mb-4 rounded-xl md:rounded-[2.5rem] min-w-full md:min-w-[220px] text-center">
+                        <span id="text-A" class="text-2xl sm:text-4xl md:text-7xl font-black text-white cartoon-text-sharp tracking-wider break-words">Ans A</span>
+                    </div>
+                    <div class="gift-box scale-75 md:scale-100 origin-bottom" id="graphic-A">
+                        <!-- SVG Low Poly Gift Box -->
+                        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                            <polygon points="100,20 180,60 100,100 20,60" fill="#FF6B6B" stroke="#C92A2A" stroke-width="4"/>
+                            <polygon points="20,60 100,100 100,180 20,140" fill="#FF8787" stroke="#C92A2A" stroke-width="4"/>
+                            <polygon points="100,100 180,60 180,140 100,180" fill="#FA5252" stroke="#C92A2A" stroke-width="4"/>
+                            <!-- Ribbon -->
+                            <polygon points="90,30 110,30 50,160 30,150" fill="#FFD43B" stroke="#E67700" stroke-width="2"/>
+                            <polygon points="90,30 110,30 170,150 150,160" fill="#FCC419" stroke="#E67700" stroke-width="2"/>
+                            <circle cx="100" cy="30" r="18" fill="#FAB005" stroke="#E67700" stroke-width="3"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div id="box-B" class="gift-box-container flex flex-col items-center anim-float w-[45%] md:w-auto" style="animation-delay: 1.5s;">
+                    <div class="comic-box bg-orange-500 px-2 py-2 md:px-10 md:py-4 mb-2 md:mb-4 rounded-xl md:rounded-[2.5rem] min-w-full md:min-w-[220px] text-center">
+                        <span id="text-B" class="text-2xl sm:text-4xl md:text-7xl font-black text-white cartoon-text-sharp tracking-wider break-words">Ans B</span>
+                    </div>
+                    <div class="gift-box scale-75 md:scale-100 origin-bottom" id="graphic-B">
+                        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                            <polygon points="100,20 180,60 100,100 20,60" fill="#4DABF7" stroke="#1864AB" stroke-width="4"/>
+                            <polygon points="20,60 100,100 100,180 20,140" fill="#74C0FC" stroke="#1864AB" stroke-width="4"/>
+                            <polygon points="100,100 180,60 180,140 100,180" fill="#339AF0" stroke="#1864AB" stroke-width="4"/>
+                            <!-- Ribbon -->
+                            <polygon points="90,30 110,30 50,160 30,150" fill="#FFD43B" stroke="#E67700" stroke-width="2"/>
+                            <polygon points="90,30 110,30 170,150 150,160" fill="#FCC419" stroke="#E67700" stroke-width="2"/>
+                            <circle cx="100" cy="30" r="18" fill="#FAB005" stroke="#E67700" stroke-width="3"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 z-50 overflow-hidden flex flex-col items-center justify-center p-4">
+            <div class="bg-sunburst"></div>
+            
+            <div class="z-10 flex flex-col items-center relative w-full max-w-full">
+                <!-- Decorative Elements -->
+                <div class="absolute -top-12 -left-4 md:-left-16 sticker spin-slow" style="font-size: 3rem;">✨</div>
+                <div class="absolute -bottom-4 -right-4 md:-right-16 sticker float-fast" style="font-size: 3rem;">🚀</div>
+
+                <h1 class="text-5xl md:text-7xl lg:text-9xl font-black text-white mb-4 md:mb-8 cartoon-text-sharp text-center tracking-wide transform -rotate-2 hover:rotate-0 transition-transform cursor-default">
+                    CARTOONS<br>
+                    <span class="text-yellow-300">GRAMMAR</span>
+                </h1>
+                
+                <div class="comic-box bg-white text-black p-4 md:p-10 mb-6 md:mb-10 w-[95%] max-w-3xl text-center text-base md:text-3xl font-bold shadow-[8px_8px_0_#000] md:shadow-[12px_12px_0_#000] anim-float mx-auto" style="animation-duration: 5s;">
+                    <p class="mb-2 md:mb-4 text-lg sm:text-xl md:text-4xl">Learn English Year 2 Grammar with your hands!</p>
+                    <p class="text-blue-900 bg-blue-100 p-3 md:p-6 rounded-2xl border-2 md:border-4 border-blue-900 border-dashed text-sm sm:text-base md:text-xl">
+                        <b>How to play:</b> Point your index finger at the correct gift box and <b>HOLD</b> for 1 second to open it.
+                    </p>
+                </div>
+
+                <!-- Input Nama Pemain -->
+                <div class="mb-6 w-[90%] max-w-sm relative z-20 flex flex-col items-center">
+                    <input type="text" id="player-name" placeholder="ENTER YOUR NAME!" maxlength="15" class="comic-box w-full text-center text-xl md:text-3xl py-3 px-4 outline-none focus:ring-4 focus:ring-blue-400 font-black uppercase placeholder-gray-400 text-black">
+                    <p id="name-error" class="text-white font-black text-sm md:text-lg mt-2 hidden bg-red-600 rounded-full px-4 py-1 border-2 border-black shadow-[2px_2px_0_#000] inline-block">Please enter your name!</p>
+                </div>
+
+                <button id="start-btn" class="comic-box bg-green-400 text-black font-black py-4 px-8 md:py-6 md:px-16 rounded-full text-3xl md:text-6xl transform transition hover:scale-110 hover:bg-green-300 pointer-events-auto hover:-translate-y-2">
+                    PLAY NOW!
+                </button>
+                <p id="loading-text" class="comic-box bg-yellow-300 text-black mt-4 md:mt-8 px-4 md:px-8 py-2 md:py-3 text-lg md:text-2xl font-bold hidden text-center">Loading AI Camera...</p>
+            </div>
+        </div>
+
+        <!-- End Screen -->
+        <div id="end-screen" class="absolute inset-0 z-50 hidden overflow-hidden flex-col items-center justify-center p-4">
+            <div class="bg-sunburst"></div>
+
+            <div class="z-10 flex flex-col items-center relative w-full max-w-2xl">
+                <h1 class="text-5xl md:text-7xl lg:text-9xl font-black text-white mb-4 md:mb-6 cartoon-text-sharp drop-shadow-[4px_4px_0_#000] md:drop-shadow-[8px_8px_0_#000] transform rotate-2 text-center">Game Over!</h1>
+                
+                <div class="comic-box bg-yellow-300 px-6 py-4 md:px-10 md:py-6 mb-6 md:mb-8 transform -rotate-2">
+                    <h2 class="text-3xl md:text-6xl text-black font-black">Score: <span id="final-score" class="text-white cartoon-text-sharp tracking-wider">0</span></h2>
+                </div>
+                
+                <!-- Leaderboard -->
+                <div class="comic-box bg-white w-[95%] md:w-full p-4 md:p-8 mb-6 md:mb-10 max-h-[40vh] overflow-y-auto pointer-events-auto mx-auto">
+                    <h3 class="text-2xl md:text-4xl text-center text-black font-black mb-4 md:mb-6 border-b-4 md:border-b-8 border-black pb-2 md:pb-4 uppercase tracking-widest">Top Scores</h3>
+                    <ul id="leaderboard-list" class="space-y-2 md:space-y-4">
+                        <!-- Dynamic List -->
+                    </ul>
+                </div>
+
+                <button id="restart-btn" class="comic-box bg-cyan-400 text-black font-black py-4 px-8 md:py-6 md:px-16 rounded-full text-3xl md:text-5xl transform transition hover:scale-110 hover:bg-cyan-300 pointer-events-auto hover:-translate-y-2">
+                    Play Again!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game Questions Database (Year 2 Grammar)
+        const questions = [
+            { q: "My mother is a doctor. ___ works in a hospital.", options: ["She", "He"], correct: 0 },
+            { q: "I have two ___. They are very cute.", options: ["cat", "cats"], correct: 1 },
+            { q: "___ is a red apple.", options: ["This", "These"], correct: 0 },
+            { q: "Ali and Abu ___ playing football.", options: ["are", "is"], correct: 0 },
+            { q: "I ___ brushing my teeth.", options: ["is", "am"], correct: 1 },
+            { q: "The bird is flying ___ the sky.", options: ["in", "on"], correct: 0 },
+            { q: "___ you like to eat ice cream?", options: ["Do", "Does"], correct: 0 },
+            { q: "She ___ to school every day.", options: ["walks", "walk"], correct: 0 },
+            { q: "This is ___ umbrella.", options: ["a", "an"], correct: 1 },
+            { q: "The dog is sleeping ___ the chair.", options: ["under", "above"], correct: 0 }
+        ];
+
+        // Audio Context (Initialized on user gesture)
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            
+            if (type === 'correct') {
+                // Happy Chime / Arpeggio
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now); // A4
+                osc.frequency.setValueAtTime(554.37, now + 0.1); // C#5
+                osc.frequency.setValueAtTime(659.25, now + 0.2); // E5
+                
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                // Buzzer
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+                
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        let gameState = 'start'; // start, playing, ended
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let questionStartTime = 0;
+        let totalTimeLeft = 120; // 2 minutes total
+        let gameTimerInterval;
+        let playerName = "GUEST"; // Simpan nama pemain
+
+        // Dwell Interaction Variables
+        let currentHoveredBox = null;
+        let hoverStartTime = 0;
+        const DWELL_TIME_MS = 1000; // 1 second
+        
+        // Element References
+        const videoElement = document.getElementById('webcam-video');
+        const canvasElement = document.getElementById('game-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const boxA = document.getElementById('box-A');
+        const boxB = document.getElementById('box-B');
+        
+        // Resize Canvas to fit container dynamically
+        function resizeCanvas() {
+            canvasElement.width = canvasElement.clientWidth;
+            canvasElement.height = canvasElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function updateDashboard() {
+            document.getElementById('score-display').innerText = score;
+            const minutes = Math.floor(totalTimeLeft / 60);
+            const seconds = totalTimeLeft % 60;
+            document.getElementById('time-display').innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }
+
+        // Confetti Helper Function
+        function shootConfetti(type) {
+            if (type === 'correct') {
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#FFD700', '#FF6347', '#32CD32', '#1E90FF']
+                });
+            } else if (type === 'endgame') {
+                const duration = 3 * 1000;
+                const end = Date.now() + duration;
+
+                (function frame() {
+                    confetti({
+                        particleCount: 5,
+                        angle: 60,
+                        spread: 55,
+                        origin: { x: 0 },
+                        colors: ['#ff0000', '#00ff00', '#0000ff']
+                    });
+                    confetti({
+                        particleCount: 5,
+                        angle: 120,
+                        spread: 55,
+                        origin: { x: 1 },
+                        colors: ['#ff0000', '#00ff00', '#0000ff']
+                    });
+
+                    if (Date.now() < end) {
+                        requestAnimationFrame(frame);
+                    }
+                }());
+            }
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIndex >= questions.length || totalTimeLeft <= 0) {
+                endGame();
+                return;
+            }
+            
+            const q = questions[currentQuestionIndex];
+            document.getElementById('q-num').innerText = currentQuestionIndex + 1;
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('text-A').innerText = q.options[0];
+            document.getElementById('text-B').innerText = q.options[1];
+            
+            // Reset graphics
+            document.getElementById('graphic-A').className = 'gift-box';
+            document.getElementById('graphic-B').className = 'gift-box';
+            
+            questionStartTime = Date.now();
+        }
+
+        function handleAnswer(selectedIndex) {
+            if (gameState !== 'playing') return;
+            const q = questions[currentQuestionIndex];
+            const isCorrect = (selectedIndex === q.correct);
+            
+            // Visual Feedback
+            const selectedBoxID = selectedIndex === 0 ? 'graphic-A' : 'graphic-B';
+            document.getElementById(selectedBoxID).classList.add('anim-open');
+
+            if (isCorrect) {
+                playSound('correct');
+                shootConfetti('correct'); // Trigger happy confetti!
+                // Calculate points based on speed. Max 100 per question, min 10.
+                const timeTaken = (Date.now() - questionStartTime) / 1000;
+                let points = Math.max(10, 100 - Math.floor(timeTaken * 5));
+                score += points;
+            } else {
+                playSound('wrong');
+                // Penalty: Deduct 5 seconds and 10 points
+                totalTimeLeft = Math.max(0, totalTimeLeft - 5);
+                score = Math.max(0, score - 10);
+            }
+            
+            updateDashboard();
+            gameState = 'loading_next'; // Pause tracking briefly
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (gameState !== 'ended') {
+                    gameState = 'playing';
+                    loadQuestion();
+                }
+            }, 1000);
+        }
+
+        // Leaderboard handling using LocalStorage
+        function getLeaderboard() {
+            const data = localStorage.getItem('cartoonsGrammarScores');
+            return data ? JSON.parse(data) : [];
+        }
+
+        function saveScore(newScore) {
+            let scores = getLeaderboard();
+            const date = new Date().toLocaleDateString();
+            scores.push({ name: playerName, score: newScore, date: date });
+            scores.sort((a, b) => b.score - a.score); // Highest to lowest
+            scores = scores.slice(0, 10); // Keep top 10
+            localStorage.setItem('cartoonsGrammarScores', JSON.stringify(scores));
+            return scores;
+        }
+
+        function updateLeaderboardUI(scores) {
+            const list = document.getElementById('leaderboard-list');
+            list.innerHTML = '';
+            if (scores.length === 0) {
+                list.innerHTML = '<li class="text-black text-center font-bold text-xl">No scores yet!</li>';
+                return;
+            }
+            scores.forEach((s, index) => {
+                const li = document.createElement('li');
+                // Comic style colorful list items
+                const colors = ['bg-pink-300', 'bg-lime-300', 'bg-blue-300', 'bg-orange-300', 'bg-purple-300'];
+                const bgColor = colors[index % colors.length];
+                
+                li.className = `flex justify-between items-center ${bgColor} border-2 md:border-4 border-black rounded-lg md:rounded-xl p-2 md:p-3 shadow-[2px_2px_0_#000] md:shadow-[4px_4px_0_#000] font-black`;
+                li.innerHTML = `
+                    <div class="flex items-center gap-2 md:gap-4 w-full">
+                        <span class="text-black text-lg md:text-2xl min-w-[30px] text-left">#${index + 1}</span>
+                        <span class="text-gray-900 text-sm md:text-xl truncate flex-1 text-left uppercase">${s.name || 'GUEST'}</span>
+                        <span class="text-black text-lg md:text-2xl whitespace-nowrap text-right">${s.score} pts</span>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        let cursorX = 0;
+        let cursorY = 0;
+        let isFirstFrame = true;
+
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+        
+        hands.setOptions({
+            maxNumHands: 2, // Track up to 2, but we will logically restrict to 1 hand
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                if (gameState === 'playing' || gameState === 'loading_next') {
+                    await hands.send({image: videoElement});
+                }
+            },
+            width: 1280,
+            height: 720
+        });
+
+        function checkCollision(x, y, element) {
+            const rect = element.getBoundingClientRect();
+            return (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+        }
+
+        function onResults(results) {
+            // Clear canvas
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            if (gameState !== 'playing') {
+                canvasCtx.restore();
+                return;
+            }
+
+            // Strictly process only if exactly ONE hand is detected to prevent errors
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length === 1) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Index finger tip is landmark 8
+                const indexTip = landmarks[8];
+                
+                // 1. FIX: EXACT ASPECT RATIO MAPPING FOR `object-fit: cover`
+                const vw = videoElement.videoWidth || 1280;
+                const vh = videoElement.videoHeight || 720;
+                const cw = canvasElement.width;
+                const ch = canvasElement.height;
+                
+                const videoRatio = vw / vh;
+                const canvasRatio = cw / ch;
+                
+                let drawWidth, drawHeight, offsetX, offsetY;
+                
+                if (canvasRatio > videoRatio) {
+                    // Canvas is wider than video. Video is cropped top/bottom.
+                    drawWidth = cw;
+                    drawHeight = cw / videoRatio;
+                    offsetX = 0;
+                    offsetY = (ch - drawHeight) / 2;
+                } else {
+                    // Canvas is taller than video. Video is cropped sides.
+                    drawWidth = ch * videoRatio;
+                    drawHeight = ch;
+                    offsetX = (cw - drawWidth) / 2;
+                    offsetY = 0;
+                }
+
+                // Map normalized coords to actual screen pixels (X is mirrored)
+                const targetX = offsetX + (1 - indexTip.x) * drawWidth;
+                const targetY = offsetY + indexTip.y * drawHeight;
+
+                // 2. FIX: CURSOR SMOOTHING (LERP)
+                if (isFirstFrame) {
+                    cursorX = targetX;
+                    cursorY = targetY;
+                    isFirstFrame = false;
+                } else {
+                    // Smooth factor: 0.4 (lower is smoother but slower, higher is faster but jittery)
+                    cursorX = cursorX + (targetX - cursorX) * 0.4;
+                    cursorY = cursorY + (targetY - cursorY) * 0.4;
+                }
+
+                // Draw pointer cursor at SMOOTHED position
+                canvasCtx.beginPath();
+                canvasCtx.arc(cursorX, cursorY, 15, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                canvasCtx.fill();
+                canvasCtx.lineWidth = 4;
+                canvasCtx.strokeStyle = '#FF4500';
+                canvasCtx.stroke();
+                
+                // Add a soft glowing effect
+                canvasCtx.shadowColor = '#FF4500';
+                canvasCtx.shadowBlur = 10;
+                canvasCtx.stroke();
+                canvasCtx.shadowBlur = 0; // reset
+
+                // Check collision with answer boxes using SMOOTHED position
+                let hoveringBox = null;
+                let boxIndex = -1;
+
+                if (checkCollision(cursorX, cursorY, boxA)) {
+                    hoveringBox = 'A';
+                    boxIndex = 0;
+                    boxA.classList.add('anim-shake');
+                } else {
+                    boxA.classList.remove('anim-shake');
+                }
+
+                if (checkCollision(cursorX, cursorY, boxB)) {
+                    hoveringBox = 'B';
+                    boxIndex = 1;
+                    boxB.classList.add('anim-shake');
+                } else {
+                    boxB.classList.remove('anim-shake');
+                }
+
+                // Dwell Logic
+                if (hoveringBox) {
+                    if (currentHoveredBox === hoveringBox) {
+                        // Continue dwelling
+                        const dwellDuration = Date.now() - hoverStartTime;
+                        
+                        // Draw progress circle around the cursor
+                        const progress = Math.min(dwellDuration / DWELL_TIME_MS, 1);
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(cursorX, cursorY, 35, -0.5 * Math.PI, (-0.5 * Math.PI) + (2 * Math.PI * progress));
+                        canvasCtx.lineWidth = 10;
+                        canvasCtx.strokeStyle = '#32CD32'; // Green progress
+                        canvasCtx.stroke();
+
+                        if (dwellDuration >= DWELL_TIME_MS) {
+                            // Trigger Selection
+                            handleAnswer(boxIndex);
+                            currentHoveredBox = null;
+                            isFirstFrame = true; // Reset cursor jump for next question
+                        }
+                    } else {
+                        // Start dwelling
+                        currentHoveredBox = hoveringBox;
+                        hoverStartTime = Date.now();
+                    }
+                } else {
+                    // Reset hover state
+                    currentHoveredBox = null;
+                }
+            } else {
+                // If 0 or >1 hands, reset hover states to avoid misclicks
+                currentHoveredBox = null;
+                boxA.classList.remove('anim-shake');
+                boxB.classList.remove('anim-shake');
+                isFirstFrame = true;
+            }
+            
+            canvasCtx.restore();
+        }
+
+        function startGame() {
+            // Semak input nama
+            const nameInputElem = document.getElementById('player-name');
+            const nameInput = nameInputElem.value.trim();
+            if (!nameInput) {
+                document.getElementById('name-error').classList.remove('hidden');
+                nameInputElem.classList.add('anim-shake');
+                setTimeout(() => nameInputElem.classList.remove('anim-shake'), 400);
+                return;
+            }
+            document.getElementById('name-error').classList.add('hidden');
+            playerName = nameInput.toUpperCase(); // Tetapkan nama pemain
+            
+            initAudio();
+            document.getElementById('start-btn').classList.add('hidden');
+            nameInputElem.parentElement.classList.add('hidden'); // Sembunyikan ruang input
+            document.getElementById('loading-text').classList.remove('hidden');
+
+            camera.start().then(() => {
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('question-container').classList.remove('hidden');
+                document.getElementById('answers-container').classList.remove('hidden');
+                document.getElementById('stickers-container').classList.remove('hidden'); // Show stickers
+                
+                gameState = 'playing';
+                currentQuestionIndex = 0;
+                score = 0;
+                totalTimeLeft = 120;
+                loadQuestion();
+
+                gameTimerInterval = setInterval(() => {
+                    if (gameState === 'playing' || gameState === 'loading_next') {
+                        totalTimeLeft--;
+                        updateDashboard();
+                        if (totalTimeLeft <= 0) {
+                            endGame();
+                        }
+                    }
+                }, 1000);
+            }).catch((err) => {
+                alert("Camera access is required to play the game.");
+                document.getElementById('start-btn').classList.remove('hidden');
+                document.getElementById('loading-text').classList.add('hidden');
+            });
+        }
+
+        function endGame() {
+            gameState = 'ended';
+            clearInterval(gameTimerInterval);
+            
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('question-container').classList.add('hidden');
+            document.getElementById('answers-container').classList.add('hidden');
+            document.getElementById('stickers-container').classList.add('hidden'); // Hide stickers
+            
+            const endScreen = document.getElementById('end-screen');
+            endScreen.classList.remove('hidden');
+            endScreen.classList.add('flex');
+            
+            document.getElementById('final-score').innerText = score;
+            shootConfetti('endgame'); // Massive confetti burst on game over
+            
+            // Handle Leaderboard
+            const newScores = saveScore(score);
+            updateLeaderboardUI(newScores);
+        }
+
+        // Event Listeners
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.remove('flex');
+            document.getElementById('dashboard').classList.remove('hidden');
+            document.getElementById('question-container').classList.remove('hidden');
+            document.getElementById('answers-container').classList.remove('hidden');
+            document.getElementById('stickers-container').classList.remove('hidden'); // Show stickers
+            
+            gameState = 'playing';
+            currentQuestionIndex = 0;
+            score = 0;
+            totalTimeLeft = 120;
+            loadQuestion();
+            gameTimerInterval = setInterval(() => {
+                    if (gameState === 'playing' || gameState === 'loading_next') {
+                        totalTimeLeft--;
+                        updateDashboard();
+                        if (totalTimeLeft <= 0) {
+                            endGame();
+                        }
+                    }
+                }, 1000);
+        });
+
+    </script>
+</body>
+</html>
